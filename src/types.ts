@@ -1,28 +1,17 @@
-export type LedgerType = 'expense' | 'income';
-export type LedgerFilter = 'all' | LedgerType;
-export type Tab = 'ledger' | 'bmi';
+export type TrafficMode = 'overview' | 'congestion' | 'transit' | 'incident'
 
-export interface LedgerEntry {
-  id: string;
-  type: LedgerType;
-  amount: number;
-  category: string;
-  date: string;
-  note: string;
+export interface TrafficEvent {
+  id: number
+  time: string
+  title: string
+  location: string
+  level: '紧急' | '警告' | '提示'
+  status: string
 }
 
-export interface BmiEntry {
-  id: string;
-  height: number;
-  weight: number;
-  date: string;
-  note: string;
+export interface DistrictData {
+  name: string
+  speed: number
+  flow: number
+  efficiency: number
 }
-
-export interface StoredData {
-  ledger: LedgerEntry[];
-  bmi: BmiEntry[];
-}
-
-export type LedgerInput = Omit<LedgerEntry, 'id'>;
-export type BmiInput = Omit<BmiEntry, 'id'>;

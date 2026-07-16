@@ -1,6 +1,7 @@
 node_modules/
 dist/
+.publish-target/
+vite-out.log
+vite-err.log
 *.local
 *.tsbuildinfo
-vite.config.js
-vite.config.d.ts
