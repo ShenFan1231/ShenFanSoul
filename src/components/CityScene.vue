@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { TrafficMode } from '../types'
 
@@ -21,6 +22,8 @@ const vehicles: Vehicle[] = []
 const selectable: THREE.Object3D[] = []
 const raycaster = new THREE.Raycaster()
 const pointer = new THREE.Vector2()
+const animationMixers: THREE.AnimationMixer[] = []
+let previousFrameTime = performance.now()
 let incidentRing: THREE.Mesh
 let busLine: THREE.Line
 let groundMaterial: THREE.MeshStandardMaterial
@@ -193,6 +196,63 @@ function createIncident() {
   scene.add(busLine)
 }
 
+async function loadCharacter() {
+  const loader = new GLTFLoader()
+  try {
+    const gltf = await loader.loadAsync(new URL('../glb/matilda.glb', import.meta.url).href)
+    const character = gltf.scene
+    const initialBox = new THREE.Box3().setFromObject(character)
+    const initialSize = initialBox.getSize(new THREE.Vector3())
+    const targetHeight = 1.8
+    const scale = initialSize.y > 0 ? targetHeight / initialSize.y : 1
+    character.scale.setScalar(scale)
+
+    const box = new THREE.Box3().setFromObject(character)
+    const center = box.getCenter(new THREE.Vector3())
+    character.position.set(-center.x, -box.min.y, -center.z)
+    character.name = 'MatildaCharacter'
+
+    character.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return
+      object.castShadow = true
+      object.receiveShadow = true
+      object.frustumCulled = true
+    })
+    const anchor = new THREE.Group()
+    anchor.name = 'MatildaCharacterAnchor'
+    anchor.position.set(0, 0.51, 14)
+    anchor.rotation.y = Math.PI * 0.15
+    anchor.add(character)
+    scene.add(anchor)
+
+    const pedestal = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.46, 0.54, 0.1, 28),
+      new THREE.MeshStandardMaterial({
+        color: 0x17443c,
+        emissive: 0x0b6b58,
+        emissiveIntensity: 0.55,
+        roughness: 0.42,
+        metalness: 0.48,
+      }),
+    )
+    pedestal.position.set(0, 0.46, 14)
+    pedestal.receiveShadow = true
+    scene.add(pedestal)
+
+    const characterLight = new THREE.PointLight(0xffe2ba, 3.5, 6, 1.8)
+    characterLight.position.set(0, 3.2, 14)
+    scene.add(characterLight)
+
+    if (gltf.animations.length > 0) {
+      const mixer = new THREE.AnimationMixer(anchor)
+      mixer.clipAction(gltf.animations[0]).play()
+      animationMixers.push(mixer)
+    }
+  } catch (error) {
+    console.error('Unable to load Matilda character model.', error)
+  }
+}
+
 function initScene() {
   if (!host.value) return
   scene = new THREE.Scene()
@@ -272,6 +332,7 @@ function initScene() {
   addRoundabout()
   createIncident()
   for (let i = 0; i < 52; i += 1) vehicles.push(createVehicle(i))
+  void loadCharacter()
   updateMode()
   updateTheme()
 
@@ -355,7 +416,11 @@ function updateTheme() {
 
 function animate() {
   frame = requestAnimationFrame(animate)
-  const time = performance.now() * 0.001
+  const currentFrameTime = performance.now()
+  const time = currentFrameTime * 0.001
+  const delta = Math.min((currentFrameTime - previousFrameTime) / 1000, 0.05)
+  previousFrameTime = currentFrameTime
+  animationMixers.forEach((mixer) => mixer.update(delta))
   const trafficFactor = 0.45 + props.intensity * 0.65
   vehicles.forEach((vehicle) => {
     vehicle.progress += vehicle.speed * vehicle.direction * trafficFactor
@@ -387,6 +452,8 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   renderer?.domElement.removeEventListener('pointerdown', onPointerDown)
   controls?.dispose()
+  animationMixers.forEach((mixer) => mixer.stopAllAction())
+  animationMixers.length = 0
   renderer?.dispose()
   scene?.traverse((object) => {
     const mesh = object as THREE.Mesh
